@@ -797,30 +797,30 @@ input[type=color]{width:36px;height:32px;padding:2px;border-radius:6px;border:1p
   </div>
 </div>
 
-<!-- ══ 加班記錄 Modal ══ -->
+<!-- ══ 加班記錄 Modal (multi-row + OCR) ══ -->
 <div class="modal-overlay" id="jx-ot-modal">
   <div class="modal-box">
     <div class="modal-header"><span>⏰ 加班記錄</span><button class="close-btn" onclick="closeModal('jx-ot-modal')">✕</button></div>
     <div class="modal-body">
-      <div style="display:grid;grid-template-columns:72px 1fr;gap:8px 10px;align-items:center">
-        <label style="font-size:12px;color:var(--muted)">日期</label>
-        <input type="date" id="jx-ot-date" onchange="updateOTCalc()" style="background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:9px 11px;font-size:13px;width:100%">
-        <label style="font-size:12px;color:var(--muted)">時數</label>
-        <input type="number" id="jx-ot-hours" placeholder="0" step="0.5" min="0" oninput="updateOTCalc()" style="background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:9px 11px;font-size:13px;width:100%;text-align:right;font-family:var(--mono)">
-        <label style="font-size:12px;color:var(--muted)">類型</label>
-        <div style="display:flex;gap:8px;padding-top:6px">
-          <button class="pill active jx-ot-type-btn" data-type="weekday" onclick="setOTType('weekday',this)">平日</button>
-          <button class="pill jx-ot-type-btn" data-type="holiday" onclick="setOTType('holiday',this)">假日</button>
+      <div style="background:var(--bg3);border-radius:10px;padding:10px 12px;margin-bottom:12px">
+        <div style="font-size:12px;font-weight:700;color:var(--accent2);margin-bottom:8px">📷 圖片辨識（自動填入）</div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <label for="jx-ot-ocr-file" style="flex:1;background:var(--bg2);border:1px dashed var(--border);border-radius:8px;padding:7px 10px;font-size:11px;color:var(--muted);cursor:pointer;text-align:center">📎 選取圖片</label>
+          <input type="file" id="jx-ot-ocr-file" accept="image/*" style="display:none" onchange="previewOTImage(this)">
+          <button onclick="runOTOCR()" class="btn btn-sm btn-primary" id="jx-ot-ocr-btn" disabled>辨識</button>
         </div>
-        <label style="font-size:12px;color:var(--muted)">加班費</label>
-        <div id="jx-ot-calc-result" style="padding-top:6px;font-size:13px">—</div>
-        <label style="font-size:12px;color:var(--muted)">備註</label>
-        <input type="text" id="jx-ot-note" placeholder="選填" style="background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:9px 11px;font-size:13px;width:100%">
+        <div id="jx-ot-ocr-preview" style="margin-top:5px;font-size:11px;color:var(--muted)"></div>
+        <div id="jx-ot-ocr-status" style="font-size:11px;color:var(--muted);margin-top:2px"></div>
       </div>
-      <div style="background:var(--bg3);border-radius:8px;padding:10px 12px;margin-top:12px;font-size:11px;color:var(--muted)">📅 加班日期在21日（含）以後 → 計入下下個月薪資；20日（含）以前 → 計入下個月薪資</div>
-      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px">
+      <div style="display:grid;grid-template-columns:100px 52px 52px 1fr 24px;gap:4px 6px;font-size:10px;color:var(--muted);padding:0 2px 4px;border-bottom:1px solid var(--border);margin-bottom:6px">
+        <span>日期</span><span>時數</span><span>類型</span><span>結算日 / 加班費</span><span></span>
+      </div>
+      <div id="jx-ot-rows"></div>
+      <button onclick="addOTRow()" style="margin-top:6px;background:none;border:1px dashed var(--border);color:var(--muted);border-radius:8px;padding:7px;width:100%;cursor:pointer;font-size:12px">＋ 新增一列</button>
+      <div style="background:var(--bg3);border-radius:8px;padding:8px 10px;margin-top:10px;font-size:11px;color:var(--muted)">📅 21日（含）以後 → 下下個月薪資；20日（含）以前 → 下個月薪資</div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
         <button class="btn btn-secondary" onclick="closeModal('jx-ot-modal')">取消</button>
-        <button class="btn btn-primary" onclick="saveOT()">儲存</button>
+        <button class="btn btn-primary" onclick="saveAllOT()">全部儲存</button>
       </div>
     </div>
   </div>
@@ -4551,38 +4551,121 @@ function saveJXSettings(){
   save();document.getElementById('jx-settings-panel').style.display='none';renderJXIncome();
 }
 
-// ── OT Modal ─────────────────────────────────────────────
-let _editOTId=null,_otType='weekday';
+// ── OT Modal (multi-row + OCR) ───────────────────────────
+let _otRowCount=0,_editOTId=null;
+
 function openOTModal(id){
-  _editOTId=id||null;_otType='weekday';
-  document.getElementById('jx-ot-date').value=new Date().toISOString().slice(0,10);
-  document.getElementById('jx-ot-hours').value='';
-  document.getElementById('jx-ot-note').value='';
-  document.getElementById('jx-ot-calc-result').textContent='—';
-  document.querySelectorAll('.jx-ot-type-btn').forEach(b=>b.classList.toggle('active',b.dataset.type==='weekday'));
+  _otRowCount=0;_editOTId=id||null;
+  document.getElementById('jx-ot-rows').innerHTML='';
+  document.getElementById('jx-ot-ocr-file').value='';
+  document.getElementById('jx-ot-ocr-preview').textContent='';
+  document.getElementById('jx-ot-ocr-status').textContent='';
+  document.getElementById('jx-ot-ocr-btn').disabled=true;
   if(id){
     const ot=(D.jxIncome?.overtimes||[]).find(x=>x.id===id);
-    if(ot){_otType=ot.type;document.getElementById('jx-ot-date').value=ot.date;document.getElementById('jx-ot-hours').value=ot.hours;document.getElementById('jx-ot-note').value=ot.note||'';document.querySelectorAll('.jx-ot-type-btn').forEach(b=>b.classList.toggle('active',b.dataset.type===_otType));updateOTCalc();}
-  }
+    addOTRow(ot?.date||'',ot?.hours||'',ot?.type||'weekday');
+  }else{addOTRow();}
   document.getElementById('jx-ot-modal').classList.add('open');
 }
-function setOTType(type,el){_otType=type;document.querySelectorAll('.jx-ot-type-btn').forEach(b=>b.classList.toggle('active',b===el));updateOTCalc();}
-function updateOTCalc(){
-  const h=Number(document.getElementById('jx-ot-hours').value)||0,a=D.jxIncome?.annualSalary||0,date=document.getElementById('jx-ot-date').value;
-  if(!a){document.getElementById('jx-ot-calc-result').textContent='請先設定年薪';return;}
-  if(!h){document.getElementById('jx-ot-calc-result').textContent='—';return;}
-  const pay=calcOTPay(a,h,_otType),pm=date?getOTPayMonth(date):'';
-  document.getElementById('jx-ot-calc-result').innerHTML=`<span style="color:var(--accent);font-weight:700;font-family:var(--mono)">$${fmt(Math.round(pay))}</span>${pm?` <span style="color:var(--muted);font-size:11px">→ 計入 ${pm} 薪資</span>`:''}`;
+
+function addOTRow(date,hours,type){
+  const idx=_otRowCount++;
+  const d=date||new Date().toISOString().slice(0,10);
+  const t=type||'weekday';
+  const row=document.createElement('div');
+  row.id='jx-ot-row-'+idx;
+  row.style.cssText='display:grid;grid-template-columns:100px 52px 52px 1fr 24px;gap:4px 6px;align-items:center;margin-bottom:5px';
+  row.innerHTML=
+    `<input type="date" class="jx-otr-date" value="${d}" onchange="updateOTRowInfo(${idx})" style="background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:5px;font-size:11px;width:100%">`+
+    `<input type="number" class="jx-otr-hours" value="${hours||''}" placeholder="0" step="0.5" min="0" oninput="updateOTRowInfo(${idx})" style="background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:5px;font-size:11px;width:100%;text-align:right;font-family:var(--mono)">`+
+    `<button class="pill jx-otr-type${t==='weekday'?' active':''}" data-type="${t}" onclick="toggleOTRowType(${idx},this)" style="font-size:10px;padding:5px 3px">${t==='weekday'?'平日':'假日'}</button>`+
+    `<div class="jx-otr-info" style="font-size:10px;color:var(--muted);line-height:1.5">—</div>`+
+    `<button onclick="document.getElementById('jx-ot-row-${idx}').remove()" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:14px;padding:0;line-height:1">✕</button>`;
+  document.getElementById('jx-ot-rows').appendChild(row);
+  updateOTRowInfo(idx);
 }
-function saveOT(){
-  const date=document.getElementById('jx-ot-date').value,h=Number(document.getElementById('jx-ot-hours').value);
-  if(!date||!h){alert('請填寫日期和時數');return;}
+
+function toggleOTRowType(idx,btn){
+  const next=btn.dataset.type==='weekday'?'holiday':'weekday';
+  btn.dataset.type=next;btn.textContent=next==='weekday'?'平日':'假日';
+  btn.classList.toggle('active',next==='weekday');
+  updateOTRowInfo(idx);
+}
+
+function updateOTRowInfo(idx){
+  const row=document.getElementById('jx-ot-row-'+idx);if(!row)return;
+  const date=row.querySelector('.jx-otr-date').value;
+  const h=Number(row.querySelector('.jx-otr-hours').value)||0;
+  const type=row.querySelector('.jx-otr-type').dataset.type;
+  const info=row.querySelector('.jx-otr-info');
+  const pm=date?getOTPayMonth(date):'';
+  const a=D.jxIncome?.annualSalary||0;
+  const pay=(a&&h)?Math.round(calcOTPay(a,h,type)):0;
+  if(!pm&&!pay){info.textContent='—';return;}
+  info.innerHTML=(pm?`<span>${pm}</span>`:'')+(pay?`${pm?'<br>':''}<span style="font-family:var(--mono);color:var(--accent);font-weight:700">$${fmt(pay)}</span>`:'');
+}
+
+function saveAllOT(){
+  const container=document.getElementById('jx-ot-rows');
+  const records=[];
+  for(const row of container.children){
+    const date=row.querySelector('.jx-otr-date').value;
+    const h=Number(row.querySelector('.jx-otr-hours').value);
+    if(!date||!h)continue;
+    records.push({date,hours:h,type:row.querySelector('.jx-otr-type').dataset.type});
+  }
+  if(!records.length){alert('請至少填寫一筆加班記錄（日期和時數不可為空）');return;}
   if(!D.jxIncome)D.jxIncome={annualSalary:0,overtimes:[],entries:[]};
-  const ot={id:_editOTId||uid(),date,hours:h,type:_otType,note:document.getElementById('jx-ot-note').value.trim()};
-  if(_editOTId)D.jxIncome.overtimes=D.jxIncome.overtimes.map(x=>x.id===_editOTId?ot:x);
-  else D.jxIncome.overtimes.push(ot);
+  if(_editOTId&&records.length===1){
+    const upd={id:_editOTId,...records[0]};
+    D.jxIncome.overtimes=D.jxIncome.overtimes.map(x=>x.id===_editOTId?upd:x);
+  }else{
+    if(_editOTId)D.jxIncome.overtimes=D.jxIncome.overtimes.filter(x=>x.id!==_editOTId);
+    records.forEach(r=>D.jxIncome.overtimes.push({id:uid(),...r}));
+  }
   save();closeModal('jx-ot-modal');renderJXIncome();
 }
+
+function previewOTImage(input){
+  const f=input.files[0];if(!f)return;
+  document.getElementById('jx-ot-ocr-btn').disabled=false;
+  document.getElementById('jx-ot-ocr-preview').textContent='已選取：'+f.name;
+}
+
+async function runOTOCR(){
+  const file=document.getElementById('jx-ot-ocr-file').files[0];if(!file)return;
+  const btn=document.getElementById('jx-ot-ocr-btn'),status=document.getElementById('jx-ot-ocr-status');
+  btn.disabled=true;status.textContent='辨識中，請稍候…';
+  try{
+    const worker=await Tesseract.createWorker(['chi_tra','eng']);
+    const {data:{text}}=await worker.recognize(file);
+    await worker.terminate();
+    const rows=_parseOTText(text);
+    if(!rows.length){status.textContent='未辨識到加班記錄，請手動輸入';btn.disabled=false;return;}
+    rows.forEach(r=>addOTRow(r.date,r.hours,r.type));
+    status.textContent=`✓ 辨識完成，新增 ${rows.length} 筆`;
+  }catch(e){status.textContent='辨識失敗：'+e.message;}
+  btn.disabled=false;
+}
+
+function _parseOTText(text){
+  const results=[],curY=new Date().getFullYear();
+  for(const raw of text.split('\n')){
+    const line=raw.trim();if(!line)continue;
+    const dm=line.match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})|(\d{1,2})[\/\-](\d{1,2})/);
+    if(!dm)continue;
+    let dateStr;
+    if(dm[1])dateStr=`${dm[1]}-${dm[2].padStart(2,'0')}-${dm[3].padStart(2,'0')}`;
+    else dateStr=`${curY}-${dm[4].padStart(2,'0')}-${dm[5].padStart(2,'0')}`;
+    const hm=line.match(/(\d+(?:\.\d+)?)\s*(?:小時|小时|時間|hrs?|hours?|時)/i);
+    if(!hm)continue;
+    const hours=parseFloat(hm[1]);if(!hours)continue;
+    const type=/假日|休假|holiday/i.test(line)?'holiday':'weekday';
+    results.push({date:dateStr,hours,type});
+  }
+  return results;
+}
+
 function delOT(id){if(!confirm('確定刪除此加班記錄？'))return;D.jxIncome.overtimes=(D.jxIncome.overtimes||[]).filter(x=>x.id!==id);save();renderJXIncome();}
 
 // ── Salary Modal ──────────────────────────────────────────
@@ -4671,32 +4754,28 @@ function renderJXIncome(){
   sel.innerHTML=[...allYears].sort((a,b)=>b-a).map(y=>`<option value="${y}"${y===prev?' selected':''}>${y}年</option>`).join('');
   const yr=parseInt(sel.value)||curY;
 
-  // OT section: group by pay month
-  const periodMap={};
-  ots.forEach(o=>{
-    const pm=getOTPayMonth(o.date);
-    if(pm.startsWith(yr.toString())||o.date.startsWith(yr.toString())){
-      if(!periodMap[pm])periodMap[pm]=[];periodMap[pm].push(o);
-    }
-  });
+  // OT section: flat list sorted by date – columns: 日期 | 時數 | 結算日 | 加班費
+  const yrOTs=ots.filter(o=>o.date.startsWith(yr.toString())||getOTPayMonth(o.date).startsWith(yr.toString()))
+    .sort((a,b)=>a.date.localeCompare(b.date));
   let otHTML='';
-  if(!Object.keys(periodMap).length){otHTML='<div class="empty">此年度尚無加班記錄</div>';}
+  if(!yrOTs.length){otHTML='<div class="empty">此年度尚無加班記錄</div>';}
   else{
-    Object.keys(periodMap).sort().forEach(pm=>{
-      const records=periodMap[pm],totalPay=records.reduce((s,o)=>s+calcOTPay(annual,o.hours,o.type),0);
-      otHTML+=`<div style="margin-bottom:12px"><div style="font-size:12px;font-weight:700;color:var(--accent2);margin-bottom:4px;display:flex;justify-content:space-between"><span>發薪月：${pm}</span><span style="font-family:var(--mono);color:var(--accent)">合計 $${fmt(Math.round(totalPay))}</span></div>`;
-      records.sort((a,b)=>a.date.localeCompare(b.date)).forEach(o=>{
-        const pay=calcOTPay(annual,o.hours,o.type);
-        otHTML+=`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px">
-          <span style="color:var(--muted);min-width:82px;flex-shrink:0">${o.date}</span>
-          <span style="flex:1">${o.type==='weekday'?'平日':'假日'} ${o.hours}h${o.note?` · ${o.note}`:''}</span>
-          <span style="font-family:var(--mono);color:var(--accent);font-weight:700;flex-shrink:0">$${fmt(Math.round(pay))}</span>
+    otHTML=`<div style="display:grid;grid-template-columns:58px 62px 50px 1fr 50px;gap:3px 6px;font-size:10px;color:var(--muted);padding:0 2px 4px;border-bottom:1px solid var(--border);margin-bottom:4px"><span>日期</span><span>時數</span><span>結算日</span><span style="text-align:right">加班費</span><span></span></div>`;
+    yrOTs.forEach(o=>{
+      const pm=getOTPayMonth(o.date),pay=calcOTPay(annual,o.hours,o.type);
+      otHTML+=`<div style="display:grid;grid-template-columns:58px 62px 50px 1fr 50px;gap:3px 6px;align-items:center;padding:5px 2px;border-bottom:1px solid #e8e5e0;font-size:12px">
+        <span style="font-family:var(--mono);font-size:11px">${o.date.slice(5)}</span>
+        <span>${o.hours}h <span style="font-size:10px;color:var(--muted)">${o.type==='weekday'?'平':'假'}</span></span>
+        <span style="font-size:11px;color:var(--accent2)">${pm.slice(5)}</span>
+        <span style="font-family:var(--mono);color:var(--accent);font-weight:700;text-align:right">$${fmt(Math.round(pay))}</span>
+        <div style="display:flex;gap:2px;justify-content:flex-end">
           <button onclick="openOTModal('${o.id}')" style="background:none;border:none;cursor:pointer;font-size:11px;color:var(--muted)">✏</button>
           <button onclick="delOT('${o.id}')" style="background:none;border:none;cursor:pointer;font-size:11px;color:var(--red)">🗑</button>
-        </div>`;
-      });
-      otHTML+='</div>';
+        </div>
+      </div>`;
     });
+    const total=yrOTs.reduce((s,o)=>s+calcOTPay(annual,o.hours,o.type),0);
+    otHTML+=`<div style="display:flex;justify-content:flex-end;font-size:12px;font-weight:700;color:var(--accent);padding:6px 2px 0">合計 <span style="font-family:var(--mono);margin-left:4px">$${fmt(Math.round(total))}</span></div>`;
   }
   document.getElementById('jx-ot-list').innerHTML=otHTML;
 
@@ -4745,7 +4824,7 @@ function renderJXIncome(){
 
 Object.assign(window,{
   openJXSettings,saveJXSettings,updateJXHourlyRate,
-  openOTModal,setOTType,updateOTCalc,saveOT,delOT,
+  openOTModal,addOTRow,toggleOTRowType,updateOTRowInfo,saveAllOT,delOT,previewOTImage,runOTOCR,
   openJXSalaryModal,setJXSalStatus,toggleJXOTAuto,updateJXSalaryCalc,renderJXSalExtras,addJXExtra,saveJXSalary,delJXSalary,
   renderJXIncome
 });
