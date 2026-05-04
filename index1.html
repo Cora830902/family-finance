@@ -834,6 +834,11 @@ input[type=color]{width:36px;height:32px;padding:2px;border-radius:6px;border:1p
       <div style="display:grid;grid-template-columns:72px 1fr;gap:8px 10px;align-items:center;margin-bottom:14px">
         <label style="font-size:12px;color:var(--muted)">發薪年月</label>
         <input type="month" id="jx-sal-month" onchange="updateJXSalaryCalc()" style="background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:9px 11px;font-size:13px;width:100%">
+        <label style="font-size:12px;color:var(--muted)">狀態</label>
+        <div style="display:flex;gap:8px;padding-top:6px">
+          <button class="pill active jx-sal-status-btn" data-status="estimate" onclick="setJXSalStatus('estimate',this)">📋 預估</button>
+          <button class="pill jx-sal-status-btn" data-status="confirmed" onclick="setJXSalStatus('confirmed',this)">✅ 已實領</button>
+        </div>
       </div>
       <div style="font-size:12px;font-weight:700;color:var(--accent);margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid var(--border)">INCOME / 加項</div>
       <div style="display:grid;grid-template-columns:1fr 120px;gap:6px;align-items:center;margin-bottom:4px">
@@ -4581,18 +4586,20 @@ function saveOT(){
 function delOT(id){if(!confirm('確定刪除此加班記錄？'))return;D.jxIncome.overtimes=(D.jxIncome.overtimes||[]).filter(x=>x.id!==id);save();renderJXIncome();}
 
 // ── Salary Modal ──────────────────────────────────────────
-let _editJXSalId=null,_jxExtInc=[],_jxExtDed=[];
-function openJXSalaryModal(id){
-  _editJXSalId=id||null;_jxExtInc=[];_jxExtDed=[];
+let _editJXSalId=null,_jxExtInc=[],_jxExtDed=[],_jxSalStatus='estimate';
+function setJXSalStatus(s,el){_jxSalStatus=s;document.querySelectorAll('.jx-sal-status-btn').forEach(b=>b.classList.toggle('active',b===el));}
+function openJXSalaryModal(id,forceConfirm){
+  _editJXSalId=id||null;_jxExtInc=[];_jxExtDed=[];_jxSalStatus=forceConfirm?'confirmed':'estimate';
   const now=new Date().toISOString().slice(0,7);
   document.getElementById('jx-sal-month').value=now;
   ['jx-sal-base','jx-sal-ot-override','jx-sal-li','jx-sal-nhi','jx-sal-pension'].forEach(k=>{document.getElementById(k).value='';});
-  document.getElementById('jx-sal-ot-auto').checked=true;
-  document.getElementById('jx-sal-ot-override').disabled=true;
+  document.getElementById('jx-sal-ot-auto').checked=!forceConfirm;
+  document.getElementById('jx-sal-ot-override').disabled=!forceConfirm;
   document.getElementById('jx-sal-note').value='';
   if(id){
     const e=(D.jxIncome?.entries||[]).find(x=>x.id===id);
     if(e){
+      _jxSalStatus=forceConfirm?'confirmed':(e.status||'estimate');
       document.getElementById('jx-sal-month').value=e.payMonth||now;
       document.getElementById('jx-sal-base').value=e.baseSalary||'';
       document.getElementById('jx-sal-li').value=e.li||'';
@@ -4601,9 +4608,13 @@ function openJXSalaryModal(id){
       document.getElementById('jx-sal-note').value=e.note||'';
       _jxExtInc=(e.extraIncome||[]).map(x=>({...x}));
       _jxExtDed=(e.extraDeduction||[]).map(x=>({...x}));
-      if(e.overtimeAuto===false){document.getElementById('jx-sal-ot-auto').checked=false;document.getElementById('jx-sal-ot-override').disabled=false;document.getElementById('jx-sal-ot-override').value=e.overtimeAmt||'';}
+      const autoOT=forceConfirm?false:(e.overtimeAuto!==false);
+      document.getElementById('jx-sal-ot-auto').checked=autoOT;
+      document.getElementById('jx-sal-ot-override').disabled=autoOT;
+      if(!autoOT)document.getElementById('jx-sal-ot-override').value=e.overtimeAmt||'';
     }
   }
+  document.querySelectorAll('.jx-sal-status-btn').forEach(b=>b.classList.toggle('active',b.dataset.status===_jxSalStatus));
   document.getElementById('jx-salary-modal-title').textContent=id?'編輯薪資明細':'新增薪資明細';
   renderJXSalExtras();updateJXSalaryCalc();
   document.getElementById('jx-salary-modal').classList.add('open');
@@ -4644,7 +4655,7 @@ function saveJXSalary(){
   const v=k=>Number(document.getElementById(k)?.value||0);
   const isAuto=document.getElementById('jx-sal-ot-auto').checked,otAmt=isAuto?getJXAutoOT(pm):v('jx-sal-ot-override');
   if(!D.jxIncome)D.jxIncome={annualSalary:0,overtimes:[],entries:[]};
-  const e={id:_editJXSalId||uid(),payMonth:pm,baseSalary:v('jx-sal-base'),overtimeAmt:Math.round(otAmt),overtimeAuto:isAuto,li:v('jx-sal-li'),nhi:v('jx-sal-nhi'),pension:v('jx-sal-pension'),extraIncome:_jxExtInc.filter(x=>x.label||x.amount),extraDeduction:_jxExtDed.filter(x=>x.label||x.amount),note:document.getElementById('jx-sal-note').value.trim()};
+  const e={id:_editJXSalId||uid(),payMonth:pm,status:_jxSalStatus,baseSalary:v('jx-sal-base'),overtimeAmt:Math.round(otAmt),overtimeAuto:isAuto,li:v('jx-sal-li'),nhi:v('jx-sal-nhi'),pension:v('jx-sal-pension'),extraIncome:_jxExtInc.filter(x=>x.label||x.amount),extraDeduction:_jxExtDed.filter(x=>x.label||x.amount),note:document.getElementById('jx-sal-note').value.trim()};
   if(_editJXSalId)D.jxIncome.entries=D.jxIncome.entries.map(x=>x.id===_editJXSalId?e:x);else D.jxIncome.entries.push(e);
   save();closeModal('jx-salary-modal');renderJXIncome();
 }
@@ -4698,15 +4709,20 @@ function renderJXIncome(){
     const extDed=(e.extraDeduction||[]).reduce((s,x)=>s+Number(x.amount||0),0);
     const inc=(e.baseSalary||0)+Math.round(otA)+extInc,ded=(e.li||0)+(e.nhi||0)+extDed,net=inc-ded;
     totInc+=inc;totDed+=ded;totOT+=Math.round(otA);
-    return`<div class="section-card" style="margin-bottom:8px">
+    const isEst=e.status!=='confirmed';
+    return`<div class="section-card" style="margin-bottom:8px;${isEst?'border-color:var(--yellow);opacity:.85':''}">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-        <div style="font-weight:700;font-size:14px">${e.payMonth}</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-weight:700;font-size:14px">${e.payMonth}</span>
+          ${isEst?`<span style="font-size:10px;background:#3d2f00;color:var(--yellow);border:1px solid var(--yellow);border-radius:20px;padding:1px 7px;font-weight:700">預估</span>`:`<span style="font-size:10px;background:#0e2d22;color:var(--accent);border:1px solid var(--accent);border-radius:20px;padding:1px 7px;font-weight:700">已實領</span>`}
+        </div>
         <div style="display:flex;gap:6px;align-items:center">
           <span style="font-family:var(--mono);font-size:14px;font-weight:700;color:${net>=0?'var(--accent)':'var(--red)'}">$${fmt(net)}</span>
           <button onclick="openJXSalaryModal('${e.id}')" style="background:none;border:none;cursor:pointer;font-size:12px;color:var(--muted)">✏</button>
           <button onclick="delJXSalary('${e.id}')" style="background:none;border:none;cursor:pointer;font-size:12px;color:var(--red)">🗑</button>
         </div>
       </div>
+      ${isEst?`<button onclick="openJXSalaryModal('${e.id}',true)" style="width:100%;background:#0e2d22;border:1px solid var(--accent);color:var(--accent);border-radius:8px;padding:7px;font-size:12px;font-weight:700;cursor:pointer;margin-bottom:8px">✅ 收到薪資了，輸入實際金額</button>`:''}
       <div class="ov-row"><span class="ov-label cream">底薪</span><span class="ov-val pos">$${fmt(e.baseSalary)}</span></div>
       <div class="ov-row"><span class="ov-label cream">加班費${e.overtimeAuto?' (自動)':''}</span><span class="ov-val pos">$${fmt(Math.round(otA))}</span></div>
       ${(e.extraIncome||[]).map(x=>`<div class="ov-row"><span class="ov-label cream">${x.label}</span><span class="ov-val pos">$${fmt(x.amount)}</span></div>`).join('')}
@@ -4730,7 +4746,7 @@ function renderJXIncome(){
 Object.assign(window,{
   openJXSettings,saveJXSettings,updateJXHourlyRate,
   openOTModal,setOTType,updateOTCalc,saveOT,delOT,
-  openJXSalaryModal,toggleJXOTAuto,updateJXSalaryCalc,renderJXSalExtras,addJXExtra,saveJXSalary,delJXSalary,
+  openJXSalaryModal,setJXSalStatus,toggleJXOTAuto,updateJXSalaryCalc,renderJXSalExtras,addJXExtra,saveJXSalary,delJXSalary,
   renderJXIncome
 });
 
