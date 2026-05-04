@@ -4879,7 +4879,7 @@ async function loadPayslipFile(input){
       pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
       const pdf=await pdfjsLib.getDocument({data:ab}).promise;
       const page=await pdf.getPage(1);
-      const vp=page.getViewport({scale:2.0});
+      const vp=page.getViewport({scale:3.0});
       canvas.width=vp.width;canvas.height=vp.height;
       canvas.style.display='block';
       await page.render({canvasContext:canvas.getContext('2d'),viewport:vp}).promise;
@@ -4900,31 +4900,64 @@ async function loadPayslipFile(input){
     const worker=await Tesseract.createWorker(['chi_tra','eng']);
     const {data:{text}}=await worker.recognize(imageBlob);
     await worker.terminate();
+    // Show raw OCR text for debugging
+    const dbg=document.getElementById('jx-payslip-result');
+    dbg.style.display='block';
+    dbg.innerHTML=`<details><summary style="font-size:11px;color:var(--muted);cursor:pointer">▶ 辨識原文（偵錯用）</summary><pre style="font-size:9px;color:var(--muted);white-space:pre-wrap;max-height:120px;overflow:auto;margin-top:4px">${text.replace(/</g,'&lt;')}</pre></details>`;
     _payslipData=_parsePayslip(text);
-    if(!_payslipData){status.textContent='無法辨識薪資單格式，請確認文件';return;}
+    if(!_payslipData){status.textContent='⚠ 未能自動解析，可展開上方原文確認 OCR 內容';return;}
     _renderPayslipPreview(_payslipData);
     document.getElementById('jx-payslip-import-btn').disabled=false;
     status.textContent='✓ 辨識完成，確認後點「填入表單」';
   }catch(e){status.textContent='辨識失敗：'+e.message;}
 }
 
-function _parsePayslip(text){
+function _parsePayslip(rawText){
+  // Remove spaces inserted between CJK characters by OCR
+  let text=rawText.replace(/([一-鿿]) +([一-鿿])/g,'$1$2')
+                  .replace(/([一-鿿]) +([一-鿿])/g,'$1$2'); // 2 passes for chains
   const joined=text.replace(/\n/g,' ');
-  function num(re){const m=joined.match(re);return m?parseInt(m[1].replace(/,/g,'')):null;}
-  // payMonth
-  const pmm=joined.match(/薪資月份[：:\s]+(\d{4})[\/\-](\d{1,2})/);
-  if(!pmm)return null;
-  const payMonth=`${pmm[1]}-${pmm[2].padStart(2,'0')}`;
-  const base=num(/底薪\s*([\d,]+)/)||0;
-  const duty=num(/職務加給\s*([\d,]+)/)||0;
-  // current OT and retroactive OT (追溯/迫溯)
-  const otCur=num(/平日加班免稅(?!\[|\s*\[)\s*([\d,]+)/)||num(/平日加班免稅\s+([\d,]+)/)||0;
-  const otRetro=num(/平日加班免稅\s*[\[【].*?[\]】]\s*([\d,]+)/)||0;
-  const li=num(/勞保員工負擔\s*([\d,]+)/)||0;
-  const nhi=num(/健保員工負擔\s*([\d,]+)/)||0;
-  const welfare=num(/福利金\s*([\d,]+)/)||0;
-  const tax=num(/所得稅\s*([\d,]+)/)||0;
-  const net=num(/實發金額[（(]A[\-－]B[）)]\s*([\d,]+)/)||num(/實發金額\s*[\(（].*?[\)）]\s*([\d,]+)/)||null;
+  function num(re){
+    const m=joined.match(re);
+    return m?parseInt(m[1].replace(/[,，.\s]/g,'')):null;
+  }
+  // payMonth: try several patterns (fullwidth colon, halfwidth, space, etc.)
+  let payMonth=null;
+  const pmPatterns=[
+    /薪資月份\s*[：:]\s*(\d{4})[\/\-](\d{1,2})/,
+    /月份\s*[：:]\s*(\d{4})[\/\-](\d{1,2})/,
+    /薪資月份\s+(\d{4})[\/\-](\d{1,2})/,
+    // fallback: any YYYY/MM that looks like pay month
+    /(\d{4})[\/\-](1[012]|0?[1-9])\s/,
+  ];
+  for(const re of pmPatterns){
+    const m=joined.match(re);
+    if(m){payMonth=`${m[1]}-${m[2].padStart(2,'0')}`;break;}
+  }
+  if(!payMonth)return null;
+
+  const base=num(/底薪\s*([\d,，]+)/)||0;
+  const duty=num(/職務加給\s*([\d,，]+)/)||0;
+
+  // OT: match all occurrences of 平日加班免稅 and split current vs retroactive
+  let otCur=0,otRetro=0;
+  const otMatches=[...joined.matchAll(/平日加班免稅(\s*[\[【（(][^\]】）)]*[\]】）)])?\s*([\d,，]+)/g)];
+  for(const m of otMatches){
+    const isRetro=m[1]&&/迫溯|追溯/.test(m[1]);
+    const n=parseInt((m[2]||'').replace(/[,，.\s]/g,''))||0;
+    if(isRetro)otRetro+=n;else otCur+=n;
+  }
+  // fallback if matchAll found nothing
+  if(!otCur&&!otRetro){
+    otCur=num(/平日加班免稅\s*([\d,，]+)/)||0;
+  }
+
+  const li=num(/勞保員工負擔\s*([\d,，]+)/)||0;
+  const nhi=num(/健保員工負擔\s*([\d,，]+)/)||0;
+  const welfare=num(/福利金\s*([\d,，]+)/)||0;
+  const tax=num(/所得稅\s*([\d,，]+)/)||0;
+  // net: "實發金額(A-B)" then large number
+  const net=num(/實發金額[^0-9]{0,20}([\d,，]+)/)||null;
   return{payMonth,base,duty,otCur,otRetro,li,nhi,welfare,tax,net};
 }
 
