@@ -835,7 +835,7 @@ input[type=color]{width:36px;height:32px;padding:2px;border-radius:6px;border:1p
     <div class="modal-body">
       <div style="margin-bottom:10px">
         <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:6px">選取薪資單（PDF 或圖片）</label>
-        <input type="file" id="jx-payslip-file" accept=".pdf,image/*" onchange="loadPayslipFile(this)" style="font-size:12px;color:var(--muted);width:100%">
+        <input type="file" id="jx-payslip-file" accept=".pdf,image/*" multiple onchange="loadPayslipFile(this)" style="font-size:12px;color:var(--muted);width:100%">
       </div>
       <canvas id="jx-payslip-canvas" style="display:none;width:100%;border-radius:8px;margin-bottom:8px"></canvas>
       <div id="jx-payslip-status" style="font-size:11px;color:var(--muted);margin-bottom:6px"></div>
@@ -4850,10 +4850,10 @@ function renderJXIncome(){
     'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 })();
 
-let _payslipData=null;
+let _payslipList=[];
 
 function openPayslipImport(){
-  _payslipData=null;
+  _payslipList=[];
   document.getElementById('jx-payslip-file').value='';
   document.getElementById('jx-payslip-status').textContent='';
   document.getElementById('jx-payslip-result').style.display='none';
@@ -4862,54 +4862,83 @@ function openPayslipImport(){
   document.getElementById('jx-payslip-import-modal').classList.add('open');
 }
 
-async function loadPayslipFile(input){
-  const file=input.files[0];if(!file)return;
-  const status=document.getElementById('jx-payslip-status');
-  const canvas=document.getElementById('jx-payslip-canvas');
-  _payslipData=null;
-  document.getElementById('jx-payslip-result').style.display='none';
-  document.getElementById('jx-payslip-import-btn').disabled=true;
-
-  let imageBlob;
+async function _fileToBlob(file,canvas){
   if(file.name.toLowerCase().endsWith('.pdf')||file.type==='application/pdf'){
-    status.textContent='讀取 PDF 中…';
-    try{
-      const ab=await file.arrayBuffer();
-      if(!window.pdfjsLib){status.textContent='PDF 套件未載入，請重新整理後再試';return;}
-      pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-      const pdf=await pdfjsLib.getDocument({data:ab}).promise;
-      const page=await pdf.getPage(1);
-      const vp=page.getViewport({scale:3.0});
-      canvas.width=vp.width;canvas.height=vp.height;
-      canvas.style.display='block';
-      await page.render({canvasContext:canvas.getContext('2d'),viewport:vp}).promise;
-      imageBlob=await new Promise(r=>canvas.toBlob(r,'image/png'));
-    }catch(e){status.textContent='讀取 PDF 失敗：'+e.message;return;}
+    if(!window.pdfjsLib)throw new Error('PDF 套件未載入');
+    pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    const pdf=await pdfjsLib.getDocument({data:await file.arrayBuffer()}).promise;
+    const page=await pdf.getPage(1);
+    const vp=page.getViewport({scale:3.0});
+    canvas.width=vp.width;canvas.height=vp.height;
+    await page.render({canvasContext:canvas.getContext('2d'),viewport:vp}).promise;
   }else{
-    const img=new Image();const url=URL.createObjectURL(file);
+    const img=new Image(),url=URL.createObjectURL(file);
     await new Promise((res,rej)=>{img.onload=res;img.onerror=rej;img.src=url;});
     canvas.width=img.naturalWidth;canvas.height=img.naturalHeight;
-    canvas.style.display='block';
-    canvas.getContext('2d').drawImage(img,0,0);
-    URL.revokeObjectURL(url);
-    imageBlob=await new Promise(r=>canvas.toBlob(r,'image/png'));
+    canvas.getContext('2d').drawImage(img,0,0);URL.revokeObjectURL(url);
   }
+  return new Promise(r=>canvas.toBlob(r,'image/png'));
+}
 
-  status.textContent='OCR 辨識中，請稍候…';
-  try{
-    const worker=await Tesseract.createWorker(['chi_tra','eng']);
-    const {data:{text}}=await worker.recognize(imageBlob);
-    await worker.terminate();
-    // Show raw OCR text for debugging
-    const dbg=document.getElementById('jx-payslip-result');
-    dbg.style.display='block';
-    dbg.innerHTML=`<details><summary style="font-size:11px;color:var(--muted);cursor:pointer">▶ 辨識原文（偵錯用）</summary><pre style="font-size:9px;color:var(--muted);white-space:pre-wrap;max-height:120px;overflow:auto;margin-top:4px">${text.replace(/</g,'&lt;')}</pre></details>`;
-    _payslipData=_parsePayslip(text);
-    if(!_payslipData){status.textContent='⚠ 未能自動解析，可展開上方原文確認 OCR 內容';return;}
-    _renderPayslipPreview(_payslipData);
-    document.getElementById('jx-payslip-import-btn').disabled=false;
-    status.textContent='✓ 辨識完成，確認後點「填入表單」';
-  }catch(e){status.textContent='辨識失敗：'+e.message;}
+async function loadPayslipFile(input){
+  const files=[...input.files];if(!files.length)return;
+  const status=document.getElementById('jx-payslip-status');
+  const canvas=document.getElementById('jx-payslip-canvas');
+  const resultEl=document.getElementById('jx-payslip-result');
+  _payslipList=[];
+  resultEl.style.display='none';
+  document.getElementById('jx-payslip-import-btn').disabled=true;
+  canvas.style.display='none';
+
+  status.textContent='載入 OCR 引擎…';
+  const worker=await Tesseract.createWorker(['chi_tra','eng']);
+
+  for(let i=0;i<files.length;i++){
+    const file=files[i];
+    status.textContent=`辨識 ${i+1}/${files.length}：${file.name}`;
+    try{
+      const blob=await _fileToBlob(file,canvas);
+      const {data:{text}}=await worker.recognize(blob);
+      const data=_parsePayslip(text);
+      _payslipList.push({name:file.name,data,rawText:text});
+    }catch(e){
+      _payslipList.push({name:file.name,data:null,error:e.message,rawText:''});
+    }
+  }
+  await worker.terminate();
+
+  const ok=_payslipList.filter(x=>x.data).length;
+  _renderBatchPreview(_payslipList);
+  document.getElementById('jx-payslip-import-btn').disabled=!ok;
+  document.getElementById('jx-payslip-import-btn').textContent=ok>1?`全部匯入（${ok} 筆）`:'填入表單';
+  status.textContent=ok?`✓ 完成，${ok}/${files.length} 筆可匯入`:`⚠ 所有檔案均無法解析`;
+}
+
+function _renderBatchPreview(list){
+  const el=document.getElementById('jx-payslip-result');
+  el.style.display='block';
+  let html='';
+  list.forEach(({name,data,rawText,error})=>{
+    if(data){
+      const ot=data.otCur+data.otRetro;
+      html+=`<div style="border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:6px;font-size:12px">
+        <div style="font-weight:700;color:var(--accent2);margin-bottom:6px">✓ ${data.payMonth} <span style="font-size:10px;color:var(--muted);font-weight:400">${name}</span></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 10px;font-size:11px">
+          <span style="color:var(--muted)">底薪＋職務加給</span><span style="font-family:var(--mono);text-align:right">$${fmt(data.base+data.duty)}</span>
+          ${ot?`<span style="color:var(--muted)">加班費${data.otRetro?'（含追溯）':''}</span><span style="font-family:var(--mono);text-align:right;color:var(--yellow)">$${fmt(ot)}</span>`:''}
+          <span style="color:var(--muted)">扣除（勞保＋健保…）</span><span style="font-family:var(--mono);text-align:right;color:var(--red)">-$${fmt(data.li+data.nhi+data.welfare+data.tax)}</span>
+          <span style="font-weight:700">實發</span><span style="font-family:var(--mono);text-align:right;font-weight:700;color:var(--accent)">${data.net!==null?'$'+fmt(data.net):'—'}</span>
+        </div>
+      </div>`;
+    }else{
+      html+=`<div style="border:1px solid var(--red);border-radius:8px;padding:8px 10px;margin-bottom:6px;font-size:12px;opacity:.7">
+        <div style="color:var(--red);margin-bottom:4px">⚠ 無法解析：${name}</div>
+        ${error?`<div style="font-size:10px;color:var(--muted)">${error}</div>`:''}
+        <details><summary style="font-size:10px;color:var(--muted);cursor:pointer">▶ 辨識原文</summary><pre style="font-size:9px;white-space:pre-wrap;max-height:100px;overflow:auto;margin-top:4px;color:var(--muted)">${rawText.replace(/</g,'&lt;')}</pre></details>
+      </div>`;
+    }
+  });
+  el.innerHTML=html;
 }
 
 function _parsePayslip(rawText){
@@ -4979,25 +5008,47 @@ function _renderPayslipPreview(d){
 }
 
 function importPayslipData(){
-  if(!_payslipData)return;
-  const d=_payslipData;
-  closeModal('jx-payslip-import-modal');
-  _editJXSalId=null;_jxExtInc=[];_jxExtDed=[];_jxSalStatus='confirmed';
-  if(d.welfare)_jxExtDed.push({label:'福利金',amount:d.welfare});
-  if(d.tax)_jxExtDed.push({label:'所得稅',amount:d.tax});
-  document.getElementById('jx-sal-month').value=d.payMonth;
-  document.getElementById('jx-sal-base').value=d.base+d.duty||'';
-  document.getElementById('jx-sal-ot-auto').checked=false;
-  document.getElementById('jx-sal-ot-override').disabled=false;
-  document.getElementById('jx-sal-ot-override').value=(d.otCur+d.otRetro)||'';
-  document.getElementById('jx-sal-li').value=d.li||'';
-  document.getElementById('jx-sal-nhi').value=d.nhi||'';
-  document.getElementById('jx-sal-pension').value='';
-  document.getElementById('jx-sal-note').value='';
-  document.querySelectorAll('.jx-sal-status-btn').forEach(b=>b.classList.toggle('active',b.dataset.status==='confirmed'));
-  document.getElementById('jx-salary-modal-title').textContent='新增薪資明細';
-  renderJXSalExtras();updateJXSalaryCalc();
-  document.getElementById('jx-salary-modal').classList.add('open');
+  const valid=_payslipList.filter(x=>x.data);if(!valid.length)return;
+  if(!D.jxIncome)D.jxIncome={annualSalary:0,overtimes:[],entries:[]};
+
+  if(valid.length===1){
+    // Single file → pre-fill modal for review
+    const d=valid[0].data;
+    closeModal('jx-payslip-import-modal');
+    _editJXSalId=null;_jxExtInc=[];_jxExtDed=[];_jxSalStatus='confirmed';
+    if(d.welfare)_jxExtDed.push({label:'福利金',amount:d.welfare});
+    if(d.tax)_jxExtDed.push({label:'所得稅',amount:d.tax});
+    document.getElementById('jx-sal-month').value=d.payMonth;
+    document.getElementById('jx-sal-base').value=d.base+d.duty||'';
+    document.getElementById('jx-sal-ot-auto').checked=false;
+    document.getElementById('jx-sal-ot-override').disabled=false;
+    document.getElementById('jx-sal-ot-override').value=(d.otCur+d.otRetro)||'';
+    document.getElementById('jx-sal-li').value=d.li||'';
+    document.getElementById('jx-sal-nhi').value=d.nhi||'';
+    document.getElementById('jx-sal-pension').value='';
+    document.getElementById('jx-sal-note').value='';
+    document.querySelectorAll('.jx-sal-status-btn').forEach(b=>b.classList.toggle('active',b.dataset.status==='confirmed'));
+    document.getElementById('jx-salary-modal-title').textContent='新增薪資明細（薪資單匯入）';
+    renderJXSalExtras();updateJXSalaryCalc();
+    document.getElementById('jx-salary-modal').classList.add('open');
+  }else{
+    // Multiple files → save all directly, skip modal
+    let added=0;
+    valid.forEach(({data:d})=>{
+      const extDed=[];
+      if(d.welfare)extDed.push({label:'福利金',amount:d.welfare});
+      if(d.tax)extDed.push({label:'所得稅',amount:d.tax});
+      const entry={id:uid(),payMonth:d.payMonth,status:'confirmed',
+        baseSalary:d.base+d.duty,overtimeAmt:d.otCur+d.otRetro,overtimeAuto:false,
+        li:d.li,nhi:d.nhi,pension:0,extraIncome:[],extraDeduction:extDed,note:''};
+      // Skip if same payMonth already exists
+      if(!D.jxIncome.entries.find(e=>e.payMonth===d.payMonth)){
+        D.jxIncome.entries.push(entry);added++;
+      }
+    });
+    save();closeModal('jx-payslip-import-modal');renderJXIncome();
+    if(added<valid.length)alert(`已匯入 ${added} 筆（${valid.length-added} 筆因月份重複略過）`);
+  }
 }
 
 Object.assign(window,{
