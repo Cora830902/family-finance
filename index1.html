@@ -238,7 +238,8 @@ input[type=color]{width:36px;height:32px;padding:2px;border-radius:6px;border:1p
     <button class="tab-btn" onclick="switchTab(3)">🤝 借貸</button>
     <button class="tab-btn" onclick="switchTab(4)">🥇 黃金</button>
     <button class="tab-btn" onclick="switchTab(5)">💰 存錢計畫</button>
-    <button class="tab-btn" onclick="switchTab(7)">📊 年收入</button>
+    <button class="tab-btn" onclick="switchTab(7)">📊 孟青年收入</button>
+    <button class="tab-btn" onclick="switchTab(8)">📊 景翔年收入</button>
     <button class="tab-btn" onclick="switchTab(6)">🔒 備份</button>
   </div>
 
@@ -600,6 +601,35 @@ input[type=color]{width:36px;height:32px;padding:2px;border-radius:6px;border:1p
     </div>
   </div>
 
+  <!-- ══ 景翔年收入 ══ -->
+  <div class="tab-content" id="tab-8" data-tab="8">
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
+      <select id="jx-year-select" onchange="renderJXIncome()" style="background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:8px 12px;font-size:13px;flex:1"></select>
+      <button class="btn-icon" onclick="openJXSalaryModal()">＋ 薪資</button>
+      <button class="btn-ghost" onclick="openOTModal()">＋ 加班</button>
+      <button class="btn-ghost" onclick="openJXSettings()">⚙️</button>
+    </div>
+    <div id="jx-settings-panel" style="display:none;background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:12px">
+      <div style="font-size:13px;font-weight:700;color:var(--accent2);margin-bottom:10px">⚙️ 年薪設定</div>
+      <div style="display:grid;grid-template-columns:1fr 140px;gap:8px;align-items:center;margin-bottom:8px">
+        <span style="font-size:12px;color:var(--muted)">景翔年薪（稅前）</span>
+        <input type="number" id="jx-annual-salary" placeholder="0" oninput="updateJXHourlyRate()" style="background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:7px 10px;font-size:13px;text-align:right;font-family:var(--mono)">
+      </div>
+      <div id="jx-rate-info" style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.8"></div>
+      <div style="text-align:right"><button class="btn btn-primary btn-sm" onclick="saveJXSettings()">儲存</button></div>
+    </div>
+    <div id="jx-year-summary" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:14px"></div>
+    <div class="section-card" style="margin-bottom:10px">
+      <div class="section-title"><span>⏰ 加班記錄</span><button class="btn btn-sm btn-ghost" onclick="openOTModal()">＋</button></div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:8px">計算方式：平日前2小時×1.34，之後×1.67；假日0~2h×1.34，2~9h×1.67，9h+×2.67</div>
+      <div id="jx-ot-list"></div>
+    </div>
+    <div class="section-card">
+      <div class="section-title"><span>💵 薪資記錄</span><button class="btn btn-sm btn-ghost" onclick="openJXSalaryModal()">＋</button></div>
+      <div id="jx-salary-list"></div>
+    </div>
+  </div>
+
   <!-- ══ 備份與還原 ══ -->
   <div class="tab-content" id="tab-6" data-tab="6">
     <!-- Quick Nav -->
@@ -762,6 +792,94 @@ input[type=color]{width:36px;height:32px;padding:2px;border-radius:6px;border:1p
       <div style="display:flex;justify-content:flex-end;gap:8px">
         <button class="btn btn-secondary" onclick="closeModal('income-entry-modal')">取消</button>
         <button class="btn btn-primary" onclick="saveIncomeEntry()">儲存</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ 加班記錄 Modal ══ -->
+<div class="modal-overlay" id="jx-ot-modal">
+  <div class="modal-box">
+    <div class="modal-header"><span>⏰ 加班記錄</span><button class="close-btn" onclick="closeModal('jx-ot-modal')">✕</button></div>
+    <div class="modal-body">
+      <div style="display:grid;grid-template-columns:72px 1fr;gap:8px 10px;align-items:center">
+        <label style="font-size:12px;color:var(--muted)">日期</label>
+        <input type="date" id="jx-ot-date" onchange="updateOTCalc()" style="background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:9px 11px;font-size:13px;width:100%">
+        <label style="font-size:12px;color:var(--muted)">時數</label>
+        <input type="number" id="jx-ot-hours" placeholder="0" step="0.5" min="0" oninput="updateOTCalc()" style="background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:9px 11px;font-size:13px;width:100%;text-align:right;font-family:var(--mono)">
+        <label style="font-size:12px;color:var(--muted)">類型</label>
+        <div style="display:flex;gap:8px;padding-top:6px">
+          <button class="pill active jx-ot-type-btn" data-type="weekday" onclick="setOTType('weekday',this)">平日</button>
+          <button class="pill jx-ot-type-btn" data-type="holiday" onclick="setOTType('holiday',this)">假日</button>
+        </div>
+        <label style="font-size:12px;color:var(--muted)">加班費</label>
+        <div id="jx-ot-calc-result" style="padding-top:6px;font-size:13px">—</div>
+        <label style="font-size:12px;color:var(--muted)">備註</label>
+        <input type="text" id="jx-ot-note" placeholder="選填" style="background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:9px 11px;font-size:13px;width:100%">
+      </div>
+      <div style="background:var(--bg3);border-radius:8px;padding:10px 12px;margin-top:12px;font-size:11px;color:var(--muted)">📅 加班日期在21日（含）以後 → 計入下下個月薪資；20日（含）以前 → 計入下個月薪資</div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px">
+        <button class="btn btn-secondary" onclick="closeModal('jx-ot-modal')">取消</button>
+        <button class="btn btn-primary" onclick="saveOT()">儲存</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ 景翔薪資 Modal ══ -->
+<div class="modal-overlay" id="jx-salary-modal">
+  <div class="modal-box">
+    <div class="modal-header"><span id="jx-salary-modal-title">景翔薪資明細</span><button class="close-btn" onclick="closeModal('jx-salary-modal')">✕</button></div>
+    <div class="modal-body">
+      <div style="display:grid;grid-template-columns:72px 1fr;gap:8px 10px;align-items:center;margin-bottom:14px">
+        <label style="font-size:12px;color:var(--muted)">發薪年月</label>
+        <input type="month" id="jx-sal-month" onchange="updateJXSalaryCalc()" style="background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:9px 11px;font-size:13px;width:100%">
+      </div>
+      <div style="font-size:12px;font-weight:700;color:var(--accent);margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid var(--border)">INCOME / 加項</div>
+      <div style="display:grid;grid-template-columns:1fr 120px;gap:6px;align-items:center;margin-bottom:4px">
+        <span style="font-size:12px;color:var(--muted)">底薪</span>
+        <input type="number" id="jx-sal-base" placeholder="0" oninput="updateJXSalaryCalc()" style="background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:7px 10px;font-size:13px;text-align:right;font-family:var(--mono)">
+        <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)">
+          <span>加班費</span>
+          <label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer"><input type="checkbox" id="jx-sal-ot-auto" checked onchange="toggleJXOTAuto()">自動帶入</label>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span id="jx-sal-ot-display" style="font-family:var(--mono);font-size:12px;color:var(--accent);flex-shrink:0">$0</span>
+          <input type="number" id="jx-sal-ot-override" placeholder="手動輸入" disabled oninput="updateJXSalaryCalc()" style="flex:1;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:5px 8px;font-size:12px;text-align:right;font-family:var(--mono)">
+        </div>
+      </div>
+      <div id="jx-extra-income-list"></div>
+      <button onclick="addJXExtra('income')" style="background:none;border:1px dashed var(--border);color:var(--muted);border-radius:6px;padding:5px 12px;font-size:12px;cursor:pointer;width:100%;margin-bottom:10px">＋ 新增加項</button>
+      <div style="display:flex;justify-content:space-between;background:var(--bg3);border-radius:6px;padding:7px 10px;margin-bottom:14px">
+        <span style="font-size:12px;color:var(--muted)">加項合計</span>
+        <span id="jx-sal-income-total" style="font-family:var(--mono);font-size:13px;font-weight:700;color:var(--accent)">$0</span>
+      </div>
+      <div style="font-size:12px;font-weight:700;color:var(--red);margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid var(--border)">DEDUCTION / 減項</div>
+      <div style="display:grid;grid-template-columns:1fr 120px;gap:6px;align-items:center;margin-bottom:4px">
+        <span style="font-size:12px;color:var(--muted)">勞保</span>
+        <input type="number" id="jx-sal-li" placeholder="0" oninput="updateJXSalaryCalc()" style="background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:7px 10px;font-size:13px;text-align:right;font-family:var(--mono)">
+        <span style="font-size:12px;color:var(--muted)">健保</span>
+        <input type="number" id="jx-sal-nhi" placeholder="0" oninput="updateJXSalaryCalc()" style="background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:7px 10px;font-size:13px;text-align:right;font-family:var(--mono)">
+      </div>
+      <div id="jx-extra-deduction-list"></div>
+      <button onclick="addJXExtra('deduction')" style="background:none;border:1px dashed var(--border);color:var(--muted);border-radius:6px;padding:5px 12px;font-size:12px;cursor:pointer;width:100%;margin-bottom:10px">＋ 新增減項</button>
+      <div style="display:flex;justify-content:space-between;background:var(--bg3);border-radius:6px;padding:7px 10px;margin-bottom:8px">
+        <span style="font-size:12px;color:var(--muted)">減項合計</span>
+        <span id="jx-sal-deduction-total" style="font-family:var(--mono);font-size:13px;font-weight:700;color:var(--red)">$0</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;background:#0e2d22;border:1px solid #1d5c3e;border-radius:8px;padding:10px 12px;margin-bottom:14px">
+        <span style="font-size:13px;font-weight:700">發淨額</span>
+        <span id="jx-sal-net" style="font-family:var(--mono);font-size:15px;font-weight:700;color:var(--accent)">$0</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 120px;gap:6px;align-items:center;margin-bottom:14px">
+        <span style="font-size:12px;color:var(--muted)">退休金公司提撥</span>
+        <input type="number" id="jx-sal-pension" placeholder="0" style="background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:7px 10px;font-size:13px;text-align:right;font-family:var(--mono)">
+        <span style="font-size:12px;color:var(--muted)">備註</span>
+        <input type="text" id="jx-sal-note" placeholder="選填" style="background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:7px 10px;font-size:13px">
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px">
+        <button class="btn btn-secondary" onclick="closeModal('jx-salary-modal')">取消</button>
+        <button class="btn btn-primary" onclick="saveJXSalary()">儲存</button>
       </div>
     </div>
   </div>
@@ -4390,6 +4508,231 @@ async function updateCCNotifications(){
 }
 
 Object.assign(window,{initNotifications,updateCCNotifications});
+
+// ═══════════════════════════════════════════════════════════
+//  景翔年收入
+// ═══════════════════════════════════════════════════════════
+(function(){var o=runMigrate;runMigrate=function(){o();if(!D.jxIncome)D.jxIncome={annualSalary:0,overtimes:[],entries:[]};if(!D.jxIncome.overtimes)D.jxIncome.overtimes=[];if(!D.jxIncome.entries)D.jxIncome.entries=[];};})();
+window.switchTab=(function(o){return function(i){o(i);if(i===8)renderJXIncome();};})(window.switchTab);
+
+// ── 加班費計算 ───────────────────────────────────────────
+function calcOTPay(annual,hours,type){
+  const hr=(annual/12)/240;
+  if(type==='weekday'){return hours<=2?hours*hr*1.34:(2*1.34+(hours-2)*1.67)*hr;}
+  else{if(hours<=2)return hours*hr*1.34;if(hours<=9)return(2*1.34+(hours-2)*1.67)*hr;return(2*1.34+7*1.67+(hours-9)*2.67)*hr;}
+}
+function getOTPayMonth(dateStr){
+  const d=new Date(dateStr+'T00:00:00'),day=d.getDate(),m=day>=21?d.getMonth()+2:d.getMonth()+1,pd=new Date(d.getFullYear(),m,1);
+  return`${pd.getFullYear()}-${String(pd.getMonth()+1).padStart(2,'0')}`;
+}
+function getJXAutoOT(payMonth){
+  const a=D.jxIncome?.annualSalary||0;if(!a)return 0;
+  return(D.jxIncome.overtimes||[]).filter(o=>getOTPayMonth(o.date)===payMonth).reduce((s,o)=>s+calcOTPay(a,o.hours,o.type),0);
+}
+
+// ── Settings ─────────────────────────────────────────────
+function openJXSettings(){
+  const p=document.getElementById('jx-settings-panel'),open=p.style.display!=='none';
+  p.style.display=open?'none':'block';
+  if(!open){document.getElementById('jx-annual-salary').value=D.jxIncome?.annualSalary||'';updateJXHourlyRate();}
+}
+function updateJXHourlyRate(){
+  const a=Number(document.getElementById('jx-annual-salary').value)||0,m=a/12,hr=m/240;
+  document.getElementById('jx-rate-info').textContent=a?`月薪 $${fmt(Math.round(m))}  ·  時薪 $${hr.toFixed(1)}\n平日加班2h 約 $${fmt(Math.round(calcOTPay(a,2,'weekday')))} · 假日8h 約 $${fmt(Math.round(calcOTPay(a,8,'holiday')))}`:'請輸入年薪';
+}
+function saveJXSettings(){
+  if(!D.jxIncome)D.jxIncome={annualSalary:0,overtimes:[],entries:[]};
+  D.jxIncome.annualSalary=Number(document.getElementById('jx-annual-salary').value)||0;
+  save();document.getElementById('jx-settings-panel').style.display='none';renderJXIncome();
+}
+
+// ── OT Modal ─────────────────────────────────────────────
+let _editOTId=null,_otType='weekday';
+function openOTModal(id){
+  _editOTId=id||null;_otType='weekday';
+  document.getElementById('jx-ot-date').value=new Date().toISOString().slice(0,10);
+  document.getElementById('jx-ot-hours').value='';
+  document.getElementById('jx-ot-note').value='';
+  document.getElementById('jx-ot-calc-result').textContent='—';
+  document.querySelectorAll('.jx-ot-type-btn').forEach(b=>b.classList.toggle('active',b.dataset.type==='weekday'));
+  if(id){
+    const ot=(D.jxIncome?.overtimes||[]).find(x=>x.id===id);
+    if(ot){_otType=ot.type;document.getElementById('jx-ot-date').value=ot.date;document.getElementById('jx-ot-hours').value=ot.hours;document.getElementById('jx-ot-note').value=ot.note||'';document.querySelectorAll('.jx-ot-type-btn').forEach(b=>b.classList.toggle('active',b.dataset.type===_otType));updateOTCalc();}
+  }
+  document.getElementById('jx-ot-modal').classList.add('open');
+}
+function setOTType(type,el){_otType=type;document.querySelectorAll('.jx-ot-type-btn').forEach(b=>b.classList.toggle('active',b===el));updateOTCalc();}
+function updateOTCalc(){
+  const h=Number(document.getElementById('jx-ot-hours').value)||0,a=D.jxIncome?.annualSalary||0,date=document.getElementById('jx-ot-date').value;
+  if(!a){document.getElementById('jx-ot-calc-result').textContent='請先設定年薪';return;}
+  if(!h){document.getElementById('jx-ot-calc-result').textContent='—';return;}
+  const pay=calcOTPay(a,h,_otType),pm=date?getOTPayMonth(date):'';
+  document.getElementById('jx-ot-calc-result').innerHTML=`<span style="color:var(--accent);font-weight:700;font-family:var(--mono)">$${fmt(Math.round(pay))}</span>${pm?` <span style="color:var(--muted);font-size:11px">→ 計入 ${pm} 薪資</span>`:''}`;
+}
+function saveOT(){
+  const date=document.getElementById('jx-ot-date').value,h=Number(document.getElementById('jx-ot-hours').value);
+  if(!date||!h){alert('請填寫日期和時數');return;}
+  if(!D.jxIncome)D.jxIncome={annualSalary:0,overtimes:[],entries:[]};
+  const ot={id:_editOTId||uid(),date,hours:h,type:_otType,note:document.getElementById('jx-ot-note').value.trim()};
+  if(_editOTId)D.jxIncome.overtimes=D.jxIncome.overtimes.map(x=>x.id===_editOTId?ot:x);
+  else D.jxIncome.overtimes.push(ot);
+  save();closeModal('jx-ot-modal');renderJXIncome();
+}
+function delOT(id){if(!confirm('確定刪除此加班記錄？'))return;D.jxIncome.overtimes=(D.jxIncome.overtimes||[]).filter(x=>x.id!==id);save();renderJXIncome();}
+
+// ── Salary Modal ──────────────────────────────────────────
+let _editJXSalId=null,_jxExtInc=[],_jxExtDed=[];
+function openJXSalaryModal(id){
+  _editJXSalId=id||null;_jxExtInc=[];_jxExtDed=[];
+  const now=new Date().toISOString().slice(0,7);
+  document.getElementById('jx-sal-month').value=now;
+  ['jx-sal-base','jx-sal-ot-override','jx-sal-li','jx-sal-nhi','jx-sal-pension'].forEach(k=>{document.getElementById(k).value='';});
+  document.getElementById('jx-sal-ot-auto').checked=true;
+  document.getElementById('jx-sal-ot-override').disabled=true;
+  document.getElementById('jx-sal-note').value='';
+  if(id){
+    const e=(D.jxIncome?.entries||[]).find(x=>x.id===id);
+    if(e){
+      document.getElementById('jx-sal-month').value=e.payMonth||now;
+      document.getElementById('jx-sal-base').value=e.baseSalary||'';
+      document.getElementById('jx-sal-li').value=e.li||'';
+      document.getElementById('jx-sal-nhi').value=e.nhi||'';
+      document.getElementById('jx-sal-pension').value=e.pension||'';
+      document.getElementById('jx-sal-note').value=e.note||'';
+      _jxExtInc=(e.extraIncome||[]).map(x=>({...x}));
+      _jxExtDed=(e.extraDeduction||[]).map(x=>({...x}));
+      if(e.overtimeAuto===false){document.getElementById('jx-sal-ot-auto').checked=false;document.getElementById('jx-sal-ot-override').disabled=false;document.getElementById('jx-sal-ot-override').value=e.overtimeAmt||'';}
+    }
+  }
+  document.getElementById('jx-salary-modal-title').textContent=id?'編輯薪資明細':'新增薪資明細';
+  renderJXSalExtras();updateJXSalaryCalc();
+  document.getElementById('jx-salary-modal').classList.add('open');
+}
+function toggleJXOTAuto(){
+  const a=document.getElementById('jx-sal-ot-auto').checked;
+  document.getElementById('jx-sal-ot-override').disabled=a;
+  updateJXSalaryCalc();
+}
+function updateJXSalaryCalc(){
+  const v=k=>Number(document.getElementById(k)?.value||0);
+  const isAuto=document.getElementById('jx-sal-ot-auto').checked,pm=document.getElementById('jx-sal-month').value;
+  const otAmt=isAuto?getJXAutoOT(pm):v('jx-sal-ot-override');
+  const extInc=_jxExtInc.reduce((s,x)=>s+Number(x.amount||0),0);
+  const extDed=_jxExtDed.reduce((s,x)=>s+Number(x.amount||0),0);
+  const totalInc=v('jx-sal-base')+Math.round(otAmt)+extInc,totalDed=v('jx-sal-li')+v('jx-sal-nhi')+extDed;
+  document.getElementById('jx-sal-ot-display').textContent=`$${fmt(Math.round(otAmt))}${isAuto?' (自動)':''}`;
+  document.getElementById('jx-sal-income-total').textContent='$'+fmt(totalInc);
+  document.getElementById('jx-sal-deduction-total').textContent='$'+fmt(totalDed);
+  document.getElementById('jx-sal-net').textContent='$'+fmt(totalInc-totalDed);
+}
+function renderJXSalExtras(){
+  [['income',_jxExtInc],['deduction',_jxExtDed]].forEach(([type,arr])=>{
+    document.getElementById('jx-extra-'+type+'-list').innerHTML=arr.map((item,i)=>`
+      <div style="display:flex;gap:4px;align-items:center;margin-bottom:4px">
+        <input type="text" value="${item.label||''}" placeholder="項目名稱" oninput="${type==='income'?'_jxExtInc':'_jxExtDed'}[${i}].label=this.value"
+          style="flex:1;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:7px 8px;font-size:12px">
+        <input type="number" value="${item.amount||''}" placeholder="0" oninput="${type==='income'?'_jxExtInc':'_jxExtDed'}[${i}].amount=Number(this.value);updateJXSalaryCalc()"
+          style="width:100px;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:7px 8px;font-size:12px;text-align:right;font-family:var(--mono)">
+        <button onclick="${type==='income'?'_jxExtInc':'_jxExtDed'}.splice(${i},1);renderJXSalExtras();updateJXSalaryCalc()"
+          style="background:none;border:none;color:var(--red);cursor:pointer;font-size:16px;flex-shrink:0">✕</button>
+      </div>`).join('')||'<div style="font-size:11px;color:var(--muted);padding:4px 0">無額外項目</div>';
+  });
+}
+function addJXExtra(type){if(type==='income')_jxExtInc.push({label:'',amount:0});else _jxExtDed.push({label:'',amount:0});renderJXSalExtras();}
+function saveJXSalary(){
+  const pm=document.getElementById('jx-sal-month').value;if(!pm){alert('請選擇年月');return;}
+  const v=k=>Number(document.getElementById(k)?.value||0);
+  const isAuto=document.getElementById('jx-sal-ot-auto').checked,otAmt=isAuto?getJXAutoOT(pm):v('jx-sal-ot-override');
+  if(!D.jxIncome)D.jxIncome={annualSalary:0,overtimes:[],entries:[]};
+  const e={id:_editJXSalId||uid(),payMonth:pm,baseSalary:v('jx-sal-base'),overtimeAmt:Math.round(otAmt),overtimeAuto:isAuto,li:v('jx-sal-li'),nhi:v('jx-sal-nhi'),pension:v('jx-sal-pension'),extraIncome:_jxExtInc.filter(x=>x.label||x.amount),extraDeduction:_jxExtDed.filter(x=>x.label||x.amount),note:document.getElementById('jx-sal-note').value.trim()};
+  if(_editJXSalId)D.jxIncome.entries=D.jxIncome.entries.map(x=>x.id===_editJXSalId?e:x);else D.jxIncome.entries.push(e);
+  save();closeModal('jx-salary-modal');renderJXIncome();
+}
+function delJXSalary(id){if(!confirm('確定刪除？'))return;D.jxIncome.entries=(D.jxIncome.entries||[]).filter(x=>x.id!==id);save();renderJXIncome();}
+
+// ── Render ────────────────────────────────────────────────
+function renderJXIncome(){
+  const annual=D.jxIncome?.annualSalary||0,now=new Date(),curY=now.getFullYear();
+  const entries=D.jxIncome?.entries||[],ots=D.jxIncome?.overtimes||[];
+  const allYears=new Set([curY,...entries.map(e=>parseInt(e.payMonth)),...ots.map(o=>parseInt(o.date))].filter(Boolean));
+  const sel=document.getElementById('jx-year-select');
+  const prev=parseInt(sel.value)||curY;
+  sel.innerHTML=[...allYears].sort((a,b)=>b-a).map(y=>`<option value="${y}"${y===prev?' selected':''}>${y}年</option>`).join('');
+  const yr=parseInt(sel.value)||curY;
+
+  // OT section: group by pay month
+  const periodMap={};
+  ots.forEach(o=>{
+    const pm=getOTPayMonth(o.date);
+    if(pm.startsWith(yr.toString())||o.date.startsWith(yr.toString())){
+      if(!periodMap[pm])periodMap[pm]=[];periodMap[pm].push(o);
+    }
+  });
+  let otHTML='';
+  if(!Object.keys(periodMap).length){otHTML='<div class="empty">此年度尚無加班記錄</div>';}
+  else{
+    Object.keys(periodMap).sort().forEach(pm=>{
+      const records=periodMap[pm],totalPay=records.reduce((s,o)=>s+calcOTPay(annual,o.hours,o.type),0);
+      otHTML+=`<div style="margin-bottom:12px"><div style="font-size:12px;font-weight:700;color:var(--accent2);margin-bottom:4px;display:flex;justify-content:space-between"><span>發薪月：${pm}</span><span style="font-family:var(--mono);color:var(--accent)">合計 $${fmt(Math.round(totalPay))}</span></div>`;
+      records.sort((a,b)=>a.date.localeCompare(b.date)).forEach(o=>{
+        const pay=calcOTPay(annual,o.hours,o.type);
+        otHTML+=`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px">
+          <span style="color:var(--muted);min-width:82px;flex-shrink:0">${o.date}</span>
+          <span style="flex:1">${o.type==='weekday'?'平日':'假日'} ${o.hours}h${o.note?` · ${o.note}`:''}</span>
+          <span style="font-family:var(--mono);color:var(--accent);font-weight:700;flex-shrink:0">$${fmt(Math.round(pay))}</span>
+          <button onclick="openOTModal('${o.id}')" style="background:none;border:none;cursor:pointer;font-size:11px;color:var(--muted)">✏</button>
+          <button onclick="delOT('${o.id}')" style="background:none;border:none;cursor:pointer;font-size:11px;color:var(--red)">🗑</button>
+        </div>`;
+      });
+      otHTML+='</div>';
+    });
+  }
+  document.getElementById('jx-ot-list').innerHTML=otHTML;
+
+  // Salary section
+  const yrEntries=entries.filter(e=>e.payMonth.startsWith(yr.toString())).sort((a,b)=>b.payMonth.localeCompare(a.payMonth));
+  let totInc=0,totDed=0,totOT=0;
+  let salHTML=yrEntries.length?yrEntries.map(e=>{
+    const otA=e.overtimeAuto?getJXAutoOT(e.payMonth):e.overtimeAmt;
+    const extInc=(e.extraIncome||[]).reduce((s,x)=>s+Number(x.amount||0),0);
+    const extDed=(e.extraDeduction||[]).reduce((s,x)=>s+Number(x.amount||0),0);
+    const inc=(e.baseSalary||0)+Math.round(otA)+extInc,ded=(e.li||0)+(e.nhi||0)+extDed,net=inc-ded;
+    totInc+=inc;totDed+=ded;totOT+=Math.round(otA);
+    return`<div class="section-card" style="margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div style="font-weight:700;font-size:14px">${e.payMonth}</div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <span style="font-family:var(--mono);font-size:14px;font-weight:700;color:${net>=0?'var(--accent)':'var(--red)'}">$${fmt(net)}</span>
+          <button onclick="openJXSalaryModal('${e.id}')" style="background:none;border:none;cursor:pointer;font-size:12px;color:var(--muted)">✏</button>
+          <button onclick="delJXSalary('${e.id}')" style="background:none;border:none;cursor:pointer;font-size:12px;color:var(--red)">🗑</button>
+        </div>
+      </div>
+      <div class="ov-row"><span class="ov-label cream">底薪</span><span class="ov-val pos">$${fmt(e.baseSalary)}</span></div>
+      <div class="ov-row"><span class="ov-label cream">加班費${e.overtimeAuto?' (自動)':''}</span><span class="ov-val pos">$${fmt(Math.round(otA))}</span></div>
+      ${(e.extraIncome||[]).map(x=>`<div class="ov-row"><span class="ov-label cream">${x.label}</span><span class="ov-val pos">$${fmt(x.amount)}</span></div>`).join('')}
+      <div class="ov-row"><span class="ov-label">勞保</span><span class="ov-val neg">-$${fmt(e.li)}</span></div>
+      <div class="ov-row"><span class="ov-label">健保</span><span class="ov-val neg">-$${fmt(e.nhi)}</span></div>
+      ${(e.extraDeduction||[]).map(x=>`<div class="ov-row"><span class="ov-label">${x.label}</span><span class="ov-val neg">-$${fmt(x.amount)}</span></div>`).join('')}
+      ${e.pension?`<div class="ov-row"><span class="ov-label" style="color:var(--muted)">退休金提撥</span><span class="ov-no">$${fmt(e.pension)}</span></div>`:''}
+      ${e.note?`<div style="font-size:11px;color:var(--muted);margin-top:4px">${e.note}</div>`:''}
+    </div>`;
+  }).join(''):'<div class="empty">此年度尚無薪資記錄</div>';
+  document.getElementById('jx-salary-list').innerHTML=salHTML;
+
+  // Summary
+  document.getElementById('jx-year-summary').innerHTML=`
+    <div class="sum-box"><div class="sum-box-label">年度收入合計</div><div class="sum-box-val pos">$${fmt(totInc)}</div></div>
+    <div class="sum-box"><div class="sum-box-label">年度扣除合計</div><div class="sum-box-val neg">$${fmt(totDed)}</div></div>
+    <div class="sum-box"><div class="sum-box-label">年度加班費</div><div class="sum-box-val" style="color:var(--yellow)">$${fmt(totOT)}</div></div>
+    <div class="sum-box"><div class="sum-box-label">年度實發</div><div class="sum-box-val" style="color:var(--accent)">$${fmt(totInc-totDed)}</div></div>`;
+}
+
+Object.assign(window,{
+  openJXSettings,saveJXSettings,updateJXHourlyRate,
+  openOTModal,setOTType,updateOTCalc,saveOT,delOT,
+  openJXSalaryModal,toggleJXOTAuto,updateJXSalaryCalc,renderJXSalExtras,addJXExtra,saveJXSalary,delJXSalary,
+  renderJXIncome
+});
 
 // 直接載入，不需要登入
 loadFromFirebase();
